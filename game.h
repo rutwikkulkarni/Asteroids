@@ -67,11 +67,20 @@ struct Player{
     i32 asteroids_killed;
 };
 
-struct Image{
-    char *path;
+struct Texture{
+    u32 id;
     i32 width;
     i32 height;
     i32 channels;
+};
+
+enum ShaderType{
+    FRAGMENT,
+    VERTEX
+};
+
+struct Shader{
+    u32 id;
 };
 
 struct Bullet{
@@ -109,9 +118,8 @@ struct Game{
     Player player;
     GLuint vao;
     GLuint vbo;
-    GLuint shader;
-    GLuint texture;
-    Image spritesheet;
+    Shader quad_shader;
+    Texture spritesheet;
     Bullet bullets[MAX_BULLETS];
     i32 bullets_pointer;
     f32 bullet_timer;

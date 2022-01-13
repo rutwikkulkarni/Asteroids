@@ -27,6 +27,59 @@ void ResetAsteroids(){
     }
 }
 
+Texture CreateTexture(char *path){
+    Texture texture = {};
+    glGenTextures(1, &texture.id);
+    glBindTexture(GL_TEXTURE_2D, texture.id);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    stbi_set_flip_vertically_on_load(true);
+    u8 *image = stbi_load(path, &texture.width, &texture.height, &texture.channels, STBI_rgb_alpha);
+    if(image){
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, texture.width, texture.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image);
+        stbi_image_free(image);
+    }
+    return texture;
+}
+
+Shader LoadShader(char *path, ShaderType type){
+    Shader shader = {};
+    if(type == FRAGMENT){
+        shader.id = glCreateShader(GL_FRAGMENT_SHADER);
+    }else if(type == VERTEX){
+        shader.id = glCreateShader(GL_VERTEX_SHADER);
+    }else{
+        game.platform->OSDisplayError("Incorrect shader", "Error: incorrect shader format or shader not supported.");
+        return shader;
+    }
+    FileString source = game.platform->OSReadFileToString(path);
+    glShaderSource(shader.id, 1, &source.data, NULL);
+    glCompileShader(shader.id);
+    GLint successful;
+    glGetShaderiv(shader.id, GL_COMPILE_STATUS, &successful);
+    if(successful == GL_FALSE){
+        if(type == FRAGMENT){
+            game.platform->OSDisplayError("OpenGL Shader Compilation Error", "Failed to compile fragment shader");
+        }else if(type == VERTEX){
+            game.platform->OSDisplayError("OpenGL Shader Compilation Error", "Failed to compile vertex shader");
+        }
+        exit(1);
+    }
+    return shader;
+}
+
+Shader CreateShaderProgram(Shader vertex, Shader fragment){
+    Shader shader_program = {};
+    shader_program.id = glCreateProgram();
+    glAttachShader(shader_program.id, vertex.id);
+    glAttachShader(shader_program.id, fragment.id);
+    glLinkProgram(shader_program.id);
+    glUseProgram(shader_program.id);
+    return shader_program;
+}
+
 void PlayAnimation(Animation *anim, Vec2 pos, Vec2 scale){
     anim->playing = true;
     anim->pos = pos;
@@ -107,44 +160,12 @@ void GameInit(Platform *platform){
         glBindBuffer(GL_ARRAY_BUFFER, game.vbo);
         glBufferData(GL_ARRAY_BUFFER, sizeof(quad_vertices), quad_vertices, GL_STATIC_DRAW);
         
-        game.spritesheet.path = "../data/asteroids-arcade.png";
-        glGenTextures(1, &game.texture);
-        glBindTexture(GL_TEXTURE_2D, game.texture);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        stbi_set_flip_vertically_on_load(true);
-        u8 *image = stbi_load(game.spritesheet.path, &game.spritesheet.width, &game.spritesheet.height, &game.spritesheet.channels, STBI_rgb_alpha);
-        if(image){
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, game.spritesheet.width, game.spritesheet.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image);
-            stbi_image_free(image);
-        }
+        game.spritesheet = CreateTexture("../data/asteroids-arcade.png");
         
-        FileString vertex_source = game.platform->OSReadFileToString("../data/quad_vertex.glsl");
-        FileString fragment_source    = game.platform->OSReadFileToString("../data/quad_fragment.glsl");
-        GLuint vertex_id   = glCreateShader(GL_VERTEX_SHADER);
-        GLuint fragment_id = glCreateShader(GL_FRAGMENT_SHADER);
-        glShaderSource(vertex_id, 1, &vertex_source.data, NULL);
-        glShaderSource(fragment_id, 1, &fragment_source.data, NULL);
-        glCompileShader(vertex_id);
-        GLint successful;
-        glGetShaderiv(vertex_id, GL_COMPILE_STATUS, &successful);
-        if(successful == GL_FALSE){
-            game.platform->OSDisplayError("OpenGL Shader Compilation Error", "Failed to compile vertex shader");
-            exit(1);
-        }
-        glCompileShader(fragment_id);
-        glGetShaderiv(fragment_id, GL_COMPILE_STATUS, &successful);
-        if(successful == GL_FALSE){
-            game.platform->OSDisplayError("OpenGL Shader Compilation Error", "Failed to compile fragment shader");
-            exit(1);
-        }
-        game.shader = glCreateProgram();
-        glAttachShader(game.shader, vertex_id);
-        glAttachShader(game.shader, fragment_id);
-        glLinkProgram(game.shader);
-        glUseProgram(game.shader);
+        Shader quad_vertex_shader = LoadShader("../data/quad_vertex.glsl", VERTEX);
+        Shader quad_fragment_shader = LoadShader("../data/quad_fragment.glsl", FRAGMENT);
+        
+        game.quad_shader = CreateShaderProgram(quad_vertex_shader, quad_fragment_shader);
         
         glVertexAttribPointer(0, 3, GL_FLOAT, false, 5*sizeof(f32), (void*)0);
         glEnableVertexAttribArray(0);
@@ -154,19 +175,19 @@ void GameInit(Platform *platform){
     
     { /* Matrix initialisation */
         Mat4 ortho = Orthographic(0, game.platform->window_width, game.platform->window_height, 0, 0, 10);
-        GLuint ortho_location = glGetUniformLocation(game.shader, "ortho");
+        GLuint ortho_location = glGetUniformLocation(game.quad_shader.id, "ortho");
         glUniformMatrix4fv(ortho_location, 1, true, &ortho.elements[0][0]);
     }
 }
 
-void DrawImageFromSpritesheet(Vec2 pos, Vec2 size, Vec4 crop, f32 rot_z){
+void DrawQuadFromTexture(Texture texture, Vec2 pos, Vec2 size, Vec4 crop, f32 rot_z){
     /* Update Vertex Data per frame */
     // x = x offset, y = y offset, z = width, w = height
     Vec2 bottom_left  = V2(crop.x / 256.0f, (crop.y / 256.0f));
     Vec2 bottom_right = V2((crop.x + crop.z) / 256.0f, crop.y / 256.0f);
     Vec2 top_left     = V2(crop.x / 256.0f, (crop.y + crop.w) / 256.0f);
     Vec2 top_right    = V2((crop.x + crop.z) / 256.0f, (crop.y + crop.w) / 256.0f);
-    glBindTexture(GL_TEXTURE_2D, game.texture);
+    glBindTexture(GL_TEXTURE_2D, texture.id);
     glBindVertexArray(game.vao);
     glBindBuffer(GL_ARRAY_BUFFER, game.vbo);
     GLfloat quad_vertices[] = {
@@ -192,7 +213,7 @@ void DrawImageFromSpritesheet(Vec2 pos, Vec2 size, Vec4 crop, f32 rot_z){
         quad_vertices[i * 5 + 2] = vertex_pos.z;
     }
     glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(quad_vertices), quad_vertices);
-    glUseProgram(game.shader);
+    glUseProgram(game.quad_shader.id);
     glDrawArrays(GL_TRIANGLES, 0, 6);
 }
 
@@ -299,7 +320,7 @@ void UpdateBullets(){
     for(int i = 0; i < game.bullets_pointer; i++){
         game.bullets[i].pos = game.bullets[i].pos + game.bullets[i].velocity;
         CheckBounds(&game.bullets[i].pos, game.bullets[i].scale);
-        DrawImageFromSpritesheet(game.bullets[i].pos, game.bullets[i].scale, V4(0, 126 - 16, 16.0f, 16.0f), 0.0f);
+        DrawQuadFromTexture(game.spritesheet, game.bullets[i].pos, game.bullets[i].scale, V4(0, 126 - 16, 16.0f, 16.0f), 0.0f);
         game.bullets[i].lifetime -= game.platform->dt;
         if(game.bullets[i].lifetime < 0){
             DeleteBullet(i);
@@ -330,21 +351,21 @@ void UpdateAsteroids(){
         CheckBounds(&game.asteroids[i].pos, game.asteroids[i].scale);
         
         if(game.asteroids[i].type == 0){
-            DrawImageFromSpritesheet(game.asteroids[i].pos, game.asteroids[i].scale, BIG_ASTEROID, 0);
+            DrawQuadFromTexture(game.spritesheet, game.asteroids[i].pos, game.asteroids[i].scale, BIG_ASTEROID, 0);
         }else if(game.asteroids[i].type == 1){
-            DrawImageFromSpritesheet(game.asteroids[i].pos, game.asteroids[i].scale, MEDIUM_ASTEROID_BL, 0);
+            DrawQuadFromTexture(game.spritesheet, game.asteroids[i].pos, game.asteroids[i].scale, MEDIUM_ASTEROID_BL, 0);
         }
         else if(game.asteroids[i].type == 2){
-            DrawImageFromSpritesheet(game.asteroids[i].pos, game.asteroids[i].scale, MEDIUM_ASTEROID_BR, 0);
+            DrawQuadFromTexture(game.spritesheet, game.asteroids[i].pos, game.asteroids[i].scale, MEDIUM_ASTEROID_BR, 0);
         }
         else if(game.asteroids[i].type == 3){
-            DrawImageFromSpritesheet(game.asteroids[i].pos, game.asteroids[i].scale, MEDIUM_ASTEROID_TL, 0);
+            DrawQuadFromTexture(game.spritesheet, game.asteroids[i].pos, game.asteroids[i].scale, MEDIUM_ASTEROID_TL, 0);
         }
         else if(game.asteroids[i].type == 4){
-            DrawImageFromSpritesheet(game.asteroids[i].pos, game.asteroids[i].scale, MEDIUM_ASTEROID_TR, 0);
+            DrawQuadFromTexture(game.spritesheet, game.asteroids[i].pos, game.asteroids[i].scale, MEDIUM_ASTEROID_TR, 0);
         }
         else if(game.asteroids[i].type == 5){
-            DrawImageFromSpritesheet(game.asteroids[i].pos, game.asteroids[i].scale, SMALL_ASTEROID_BL, 0);
+            DrawQuadFromTexture(game.spritesheet, game.asteroids[i].pos, game.asteroids[i].scale, SMALL_ASTEROID_BL, 0);
         }
         
         Vec4 bounding_box_asteroid = V4(game.asteroids[i].pos.x, game.asteroids[i].pos.y, game.asteroids[i].scale.x, game.asteroids[i].scale.y);
@@ -405,7 +426,7 @@ void UpdatePlayer(){
         game.reset_asteroids = true;
     }
     
-    DrawImageFromSpritesheet(game.player.pos, game.player.scale, V4(0.0f, 256.0f - 32.0f, 32.0f, 32.0f), game.player.direction);
+    DrawQuadFromTexture(game.spritesheet, game.player.pos, game.player.scale, V4(0.0f, 256.0f - 32.0f, 32.0f, 32.0f), game.player.direction);
     if(player_pressed){
         game.player_anim.rotation = game.player.direction;
         PlayAnimation(&game.player_anim, V2(game.player.pos.x + 16*sin(Radians(game.player.direction)), game.player.pos.y - 16*cos(Radians(game.player.direction))), V2(48, 48));
@@ -419,7 +440,7 @@ void UpdateAnimation(Animation *anim){
     if(anim->playing){
         if(anim->looping){
             f32 seconds_per_frame = anim->duration / (f32)anim->frames;
-            DrawImageFromSpritesheet(anim->pos, anim->scale, anim->uv[anim->current_frame], anim->rotation);
+            DrawQuadFromTexture(game.spritesheet, anim->pos, anim->scale, anim->uv[anim->current_frame], anim->rotation);
             if(anim->frame_timer > seconds_per_frame){
                 if(anim->current_frame < anim->frames - 1) anim->current_frame++;
                 else anim->current_frame = 0;
@@ -428,7 +449,7 @@ void UpdateAnimation(Animation *anim){
             anim->frame_timer += game.platform->dt;
         } else if(anim->time_left > 0.0f){
             f32 seconds_per_frame = anim->duration / (f32)anim->frames;
-            DrawImageFromSpritesheet(anim->pos, anim->scale, anim->uv[anim->current_frame], anim->rotation);
+            DrawQuadFromTexture(game.spritesheet, anim->pos, anim->scale, anim->uv[anim->current_frame], anim->rotation);
             if(anim->frame_timer > seconds_per_frame){ anim->current_frame++;
                 anim->frame_timer = 0;
             }
