@@ -25,6 +25,16 @@ GLLoadFunc(glGetUniformLocation, GLGETUNIFORMLOCATION); \
 GLLoadFunc(glUniformMatrix4fv, GLUNIFORMMATRIX4FV); \
 GLLoadFunc(glBufferSubData, GLBUFFERSUBDATA); \
 GLLoadFunc(wglSwapIntervalEXT, WGLSWAPINTERVALEXT); \
+GLLoadFunc(glGenFramebuffers, GLGENFRAMEBUFFERS); \
+GLLoadFunc(glBindFramebuffer, GLBINDFRAMEBUFFER); \
+GLLoadFunc(glFramebufferTexture2D, GLFRAMEBUFFERTEXTURE2D); \
+GLLoadFunc(glCheckFramebufferStatus, GLCHECKFRAMEBUFFERSTATUS); \
+GLLoadFunc(glGenRenderbuffers, GLGENRENDERBUFFERS); \
+GLLoadFunc(glBindRenderbuffer, GLBINDRENDERBUFFER); \
+GLLoadFunc(glRenderbufferStorage, GLRENDERBUFFERSTORAGE); \
+GLLoadFunc(glFramebufferRenderbuffer, GLFRAMEBUFFERRENDERBUFFER); \
+GLLoadFunc(glGetShaderInfoLog, GLGETSHADERINFOLOG);
+
 
 ALL_GL_FUNCTIONS
 

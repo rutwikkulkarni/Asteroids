@@ -185,15 +185,16 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT u_msg, WPARAM w_param, LPARAM l_para
     else if(u_msg == WM_SIZE){
         RECT client_rect;
         GetClientRect(hwnd, &client_rect);
-        glViewport(0, 0, client_rect.right-client_rect.left, client_rect.bottom-client_rect.top);
+        global_platform.window_width = client_rect.right-client_rect.left;
+        global_platform.window_height = client_rect.bottom-client_rect.top;
     }
     return DefWindowProc(hwnd, u_msg, w_param, l_param);
 }
 
 int WINAPI wWinMain(HINSTANCE h_instance, HINSTANCE h_prev_instance, PWSTR p_cmd_line, int n_cmd_show){
     srand(time(NULL));
-    global_platform.window_width  = 1280;
-    global_platform.window_height = 720;
+    global_platform.initial_window_width  = 1280;
+    global_platform.initial_window_height = 720;
     global_platform.running = true;
     global_platform.OSReadFileToString = Win32ReadFileIntoString;
     global_platform.OSReadFile = Win32ReadFile;
@@ -208,7 +209,7 @@ int WINAPI wWinMain(HINSTANCE h_instance, HINSTANCE h_prev_instance, PWSTR p_cmd
     window_class.hInstance     = h_instance;
     window_class.lpszClassName = class_name;
     RegisterClassA(&window_class);
-    HWND hwnd = CreateWindowA(class_name, window_name, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, global_platform.window_width, global_platform.window_height, NULL, NULL, h_instance, NULL);
+    HWND hwnd = CreateWindowA(class_name, window_name, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, global_platform.initial_window_width, global_platform.initial_window_height, NULL, NULL, h_instance, NULL);
     if(hwnd == NULL){
         OutputDebugString("Failed to load window\n");
         return 1;
@@ -328,6 +329,8 @@ int WINAPI wWinMain(HINSTANCE h_instance, HINSTANCE h_prev_instance, PWSTR p_cmd
                 QueryPerformanceCounter(&sleep_end);
                 ms_per_frame += (sleep_end.QuadPart - ms_per_frame) / performance_frequency.QuadPart;
             }
+        }else{
+            OutputDebugString("Missed frame!");
         }
         /*
         LARGE_INTEGER actual_end;

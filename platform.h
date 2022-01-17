@@ -23,8 +23,11 @@ struct File{
 
 struct Platform{
     b32 running;
-    i32 window_width;
-    i32 window_height;
+    
+    u32 initial_window_width;
+    u32 initial_window_height;
+    u32 window_width;
+    u32 window_height;
     
     i16 *samples;
     i16 samples_to_write;

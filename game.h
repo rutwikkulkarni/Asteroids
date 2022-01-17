@@ -14,16 +14,25 @@ TO DO:
   -   - ASTEROID [X]
 -   - ENEMY  []
   -   - BULLET []
+- RENDERING 
+-   - BATCH RENDERER[]
 - CONTROLLER INPUT []
-- SCORE SYSTEM     []
+- SCORE SYSTEM     [X]
 - ENEMY AI         []
-- FONTS            []
+- FONTS            [X]
 - MENU SCREEN      []
   - GAMEPLAY         []
     -   - BIG ASTEROID: 20PTS
   -   - MEDIUM ASTEROID: 50PTS
 -   - SMALL ASTEROID: 100PTS
+
+- __BUGS__
+- Audio: clicking at the start of every sound, not sure if this is just the wav file but most likely my code
+- Frame drops every 5-10 seconds - see if batch renderer fixes this because there are a lot of draw calls atm
+- sometimes score gets counted incorrectly, there should be 1000 score after every round 
+
 */
+
 
 #define MAX_SPEED 5
 
@@ -116,10 +125,31 @@ struct Game{
     Platform *platform;
     
     Player player;
-    GLuint vao;
-    GLuint vbo;
+    //todo: maybe move this to player struct ?
+    u32 score;
+    u32 lives;
+    b32 has_invincibility;
+    f32 invincibility_time;
+    
+    /* Rendering */
+    GLuint quad_vao;
+    GLuint quad_vbo;
     Shader quad_shader;
-    Texture spritesheet;
+    Texture game_texture;
+    
+    GLuint text_vao;
+    GLuint text_vbo;
+    Shader text_shader;
+    Texture text_texture;
+    
+    GLuint fbo;
+    GLuint fbo_texture;
+    GLuint rbo;
+    GLuint fbo_vao;
+    GLuint fbo_vbo;
+    Shader fbo_shader;
+    /* --------- */
+    
     Bullet bullets[MAX_BULLETS];
     i32 bullets_pointer;
     f32 bullet_timer;
